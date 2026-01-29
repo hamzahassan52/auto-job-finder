@@ -1,14 +1,15 @@
-from app.scrapers.base_scraper import BaseScraper
+import httpx
 from bs4 import BeautifulSoup
-from urllib.parse import quote_plus, urlencode
+from urllib.parse import urlencode
 from typing import Optional
 import logging
+import asyncio
 
 logger = logging.getLogger(__name__)
 
 
-class IndeedScraper(BaseScraper):
-    """Indeed job scraper with advanced filters."""
+class IndeedScraper:
+    """Indeed job scraper with httpx (no browser required)."""
 
     # Country-specific Indeed domains
     COUNTRY_DOMAINS = {
@@ -23,12 +24,11 @@ class IndeedScraper(BaseScraper):
         "default": "www.indeed.com",
     }
 
-    # Indeed filter mappings
     TIME_FILTERS = {
-        "24h": "1",       # Last 24 hours
-        "48h": "2",       # Last 2 days
-        "1week": "7",     # Last 7 days
-        "1month": "30",   # Last 30 days
+        "24h": "1",
+        "48h": "2",
+        "1week": "7",
+        "1month": "30",
         "any": "",
     }
 
@@ -40,12 +40,28 @@ class IndeedScraper(BaseScraper):
         "any": "",
     }
 
+    def __init__(self):
+        self.headers = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Cache-Control": "max-age=0",
+            "Sec-Ch-Ua": '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
+            "Sec-Ch-Ua-Mobile": "?0",
+            "Sec-Ch-Ua-Platform": '"macOS"',
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
+            "Upgrade-Insecure-Requests": "1",
+        }
+
     @property
     def source_name(self) -> str:
         return "indeed"
 
     def _get_domain(self, country: Optional[str]) -> str:
-        """Get Indeed domain for country."""
         if not country:
             return self.COUNTRY_DOMAINS["default"]
         return self.COUNTRY_DOMAINS.get(country.lower(), self.COUNTRY_DOMAINS["default"])
@@ -61,45 +77,36 @@ class IndeedScraper(BaseScraper):
         posted_within: str = "any",
         visa_sponsorship: bool = False,
     ) -> str:
-        """Build Indeed search URL with all filters."""
-
         domain = self._get_domain(country)
 
-        # Build location string
         loc = location
         if city:
             loc = city
         elif country and not location:
             loc = country
 
-        # Add remote to keywords if searching for remote jobs
         search_keywords = keywords
         if work_mode == "remote":
             search_keywords = f"{keywords} remote"
 
-        # Add visa sponsorship keywords
         if visa_sponsorship:
             search_keywords = f"{search_keywords} visa sponsorship"
 
         params = {
             "q": search_keywords,
             "l": loc,
-            "sort": "date",  # Sort by date (most recent)
+            "sort": "date",
         }
 
-        # Add time filter
         if posted_within != "any" and posted_within in self.TIME_FILTERS:
             params["fromage"] = self.TIME_FILTERS[posted_within]
 
-        # Add job type filter
         if job_type != "any" and job_type in self.JOB_TYPE_FILTERS:
             params["jt"] = self.JOB_TYPE_FILTERS[job_type]
 
-        # Add remote filter
         if work_mode == "remote":
             params["remotejob"] = "1"
 
-        # Build URL
         query_string = urlencode({k: v for k, v in params.items() if v})
         return f"https://{domain}/jobs?{query_string}"
 
@@ -117,9 +124,7 @@ class IndeedScraper(BaseScraper):
         limit: int = 20,
     ) -> list[dict]:
         """Advanced job search with all filters."""
-
         jobs = []
-        page = await self.get_page()
 
         try:
             url = self._build_search_url(
@@ -134,32 +139,37 @@ class IndeedScraper(BaseScraper):
             )
 
             logger.info(f"Indeed search URL: {url}")
-            await page.goto(url, wait_until="domcontentloaded")
-            await page.wait_for_timeout(3000)
 
-            # Parse HTML
-            content = await page.content()
+            async with httpx.AsyncClient(headers=self.headers, follow_redirects=True, timeout=30.0) as client:
+                response = await client.get(url)
+                response.raise_for_status()
+                content = response.text
+
             soup = BeautifulSoup(content, "lxml")
 
-            # Find job cards (Indeed has multiple card formats)
-            job_cards = soup.select(".job_seen_beacon, .jobsearch-ResultsList > li")[:limit]
+            # Find job cards
+            job_cards = soup.select(".job_seen_beacon, .jobsearch-ResultsList > li, .resultContent")[:limit]
+
+            if not job_cards:
+                # Try alternative selectors
+                job_cards = soup.select("[data-testid='job-result'], .tapItem")[:limit]
+
+            logger.info(f"Found {len(job_cards)} job cards")
 
             for card in job_cards:
                 try:
-                    # Multiple selectors for different Indeed layouts
                     title_elem = card.select_one(
-                        ".jobTitle span, [data-testid='job-title'], .jcs-JobTitle"
+                        ".jobTitle span, [data-testid='job-title'], .jcs-JobTitle, h2.jobTitle a"
                     )
                     company_elem = card.select_one(
-                        "[data-testid='company-name'], .companyName, .company"
+                        "[data-testid='company-name'], .companyName, .company, span.css-92r8pb"
                     )
                     location_elem = card.select_one(
                         "[data-testid='text-location'], .companyLocation, .location"
                     )
-                    link_elem = card.select_one("a.jcs-JobTitle, a[data-jk]")
-                    date_elem = card.select_one(".date, [data-testid='myJobsStateDate']")
+                    link_elem = card.select_one("a.jcs-JobTitle, a[data-jk], h2.jobTitle a")
+                    date_elem = card.select_one(".date, [data-testid='myJobsStateDate'], .css-1yxxt5t")
 
-                    # Check for sponsorship/remote keywords
                     card_text = card.get_text().lower()
                     has_sponsorship = any(kw in card_text for kw in [
                         "visa sponsor", "sponsorship", "sponsor visa",
@@ -173,6 +183,7 @@ class IndeedScraper(BaseScraper):
                     if title_elem and company_elem:
                         job_id = ""
                         job_url = ""
+
                         if link_elem:
                             job_id = link_elem.get("data-jk", "")
                             href = link_elem.get("href", "")
@@ -200,12 +211,10 @@ class IndeedScraper(BaseScraper):
                     logger.warning(f"Failed to parse Indeed job card: {e}")
                     continue
 
-            await self.rate_limit()
+            await asyncio.sleep(2)  # Rate limiting
 
         except Exception as e:
-            logger.error(f"Indeed advanced search failed: {e}")
-        finally:
-            await page.close()
+            logger.error(f"Indeed search error: {e}")
 
         return jobs
 
@@ -219,18 +228,16 @@ class IndeedScraper(BaseScraper):
 
     async def get_job_details(self, job_url: str) -> dict:
         """Get detailed job information from Indeed."""
-
-        page = await self.get_page()
         details = {}
 
         try:
-            await page.goto(job_url, wait_until="domcontentloaded")
-            await page.wait_for_timeout(3000)
+            async with httpx.AsyncClient(headers=self.headers, follow_redirects=True, timeout=30.0) as client:
+                response = await client.get(job_url)
+                response.raise_for_status()
+                content = response.text
 
-            content = await page.content()
             soup = BeautifulSoup(content, "lxml")
 
-            # Extract details with multiple selectors
             title = soup.select_one(
                 "[data-testid='jobsearch-JobInfoHeader-title'], .jobsearch-JobInfoHeader-title"
             )
@@ -243,7 +250,6 @@ class IndeedScraper(BaseScraper):
             description = soup.select_one("#jobDescriptionText, .jobsearch-jobDescriptionText")
             salary = soup.select_one("#salaryInfoAndJobType, [data-testid='attribute_snippet_testid']")
 
-            # Check for remote/sponsorship
             desc_text = description.get_text().lower() if description else ""
 
             details = {
@@ -260,12 +266,10 @@ class IndeedScraper(BaseScraper):
                 ]),
             }
 
-            await self.rate_limit()
+            await asyncio.sleep(2)  # Rate limiting
 
         except Exception as e:
             logger.error(f"Failed to get Indeed job details: {e}")
-        finally:
-            await page.close()
 
         return details
 

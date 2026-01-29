@@ -49,6 +49,14 @@ export const userApi = {
   updateProfile: (data: any) => api.put('/users/me', data),
 };
 
+// Free sources search params
+export interface FreeSourceSearchParams {
+  keywords: string;
+  sources?: string[];
+  limit_per_source?: number;
+  save_to_db?: boolean;
+}
+
 // Jobs
 export const jobsApi = {
   list: (status?: string) => api.get('/jobs', { params: { status_filter: status } }),
@@ -64,6 +72,13 @@ export const jobsApi = {
   // Advanced search with all filters
   advancedSearch: (params: AdvancedSearchParams) =>
     api.post('/jobs/search/advanced', params),
+
+  // FREE sources search (no API key required)
+  searchFreeSources: (params: FreeSourceSearchParams) =>
+    api.post('/jobs/search/free', params),
+
+  // Get available free sources
+  getFreeSources: () => api.get('/jobs/sources/free'),
 
   updateStatus: (id: number, status: string) =>
     api.patch(`/jobs/${id}/status`, null, { params: { new_status: status } }),

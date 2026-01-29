@@ -11,8 +11,32 @@ from app.api.v1.schemas import (
 from app.core.security import get_current_user
 from app.services import ai_service
 from app.scrapers import linkedin_scraper, indeed_scraper
+from app.scrapers import (
+    remotive_api,
+    remoteok_api,
+    weworkremotely_api,
+    arbeitnow_api,
+    jobicy_api,
+    himalayas_api,
+    nodesk_api,
+    findwork_api,
+    search_all_free_sources,
+)
 
 router = APIRouter(prefix="/jobs", tags=["Jobs"])
+
+
+# Free sources mapping - 8 popular job boards
+FREE_SOURCES = {
+    "remotive": remotive_api,
+    "remoteok": remoteok_api,
+    "weworkremotely": weworkremotely_api,
+    "arbeitnow": arbeitnow_api,
+    "jobicy": jobicy_api,
+    "himalayas": himalayas_api,
+    "nodesk": nodesk_api,
+    "findwork": findwork_api,
+}
 
 
 # Schema for URL import
@@ -92,20 +116,19 @@ async def advanced_job_search(
     # Search Indeed
     if "indeed" in search.sources:
         try:
-            async with indeed_scraper as scraper:
-                jobs = await scraper.search_jobs_advanced(
-                    keywords=search.keywords,
-                    location=location,
-                    country=search.country,
-                    city=search.city,
-                    job_type=search.job_type.value,
-                    work_mode=search.work_mode.value,
-                    experience_level=search.experience_level.value,
-                    posted_within=search.posted_within.value,
-                    visa_sponsorship=search.visa_sponsorship,
-                    limit=search.limit,
-                )
-                all_jobs.extend(jobs)
+            jobs = await indeed_scraper.search_jobs_advanced(
+                keywords=search.keywords,
+                location=location,
+                country=search.country,
+                city=search.city,
+                job_type=search.job_type.value,
+                work_mode=search.work_mode.value,
+                experience_level=search.experience_level.value,
+                posted_within=search.posted_within.value,
+                visa_sponsorship=search.visa_sponsorship,
+                limit=search.limit,
+            )
+            all_jobs.extend(jobs)
         except Exception as e:
             print(f"Indeed search error: {e}")
 
@@ -155,6 +178,168 @@ async def advanced_job_search(
     }
 
 
+# Schema for free sources search
+class FreeSourceSearch(BaseModel):
+    keywords: str
+    sources: list[str] = ["remotive", "remoteok", "jobicy", "arbeitnow", "himalayas"]
+    limit_per_source: int = 10
+    save_to_db: bool = True
+
+
+@router.post("/search/free")
+async def search_free_sources(
+    search: FreeSourceSearch,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Search jobs from FREE sources (no API key required).
+
+    Available sources:
+    - remotive: Remote jobs (tech focused)
+    - remoteok: Remote jobs (all categories)
+    - jobicy: Remote jobs
+    - arbeitnow: EU/German jobs
+    - himalayas: Remote jobs
+
+    Example:
+    ```json
+    {
+        "keywords": "react developer",
+        "sources": ["remotive", "remoteok", "jobicy"],
+        "limit_per_source": 10
+    }
+    ```
+    """
+    import asyncio
+
+    all_jobs = []
+
+    # Create tasks for selected sources
+    tasks = []
+    source_names = []
+
+    for source_name in search.sources:
+        if source_name in FREE_SOURCES:
+            api = FREE_SOURCES[source_name]
+            tasks.append(api.search_jobs(search.keywords, limit=search.limit_per_source))
+            source_names.append(source_name)
+
+    # Run all searches in parallel
+    if tasks:
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for i, result in enumerate(results):
+            if isinstance(result, list):
+                all_jobs.extend(result)
+            else:
+                print(f"{source_names[i]} error: {result}")
+
+    # Save to database if requested
+    saved_count = 0
+    if search.save_to_db:
+        for job_data in all_jobs:
+            # Check if job already exists
+            if job_data.get("url"):
+                existing = await db.execute(
+                    select(Job).where(
+                        Job.user_id == current_user.id,
+                        Job.source_url == job_data.get("url")
+                    )
+                )
+                if existing.scalar_one_or_none():
+                    continue
+
+            job = Job(
+                user_id=current_user.id,
+                title=job_data.get("title", ""),
+                company_name=job_data.get("company", ""),
+                location=job_data.get("location", "Remote"),
+                description=job_data.get("description", ""),
+                salary_range=job_data.get("salary_range", ""),
+                source=JobSource.MANUAL,  # Will be shown as source in response
+                source_url=job_data.get("url", ""),
+                source_job_id=job_data.get("source_job_id", ""),
+            )
+            db.add(job)
+            saved_count += 1
+
+        await db.commit()
+
+    return {
+        "message": f"Found {len(all_jobs)} jobs from {len(search.sources)} free sources",
+        "sources_searched": search.sources,
+        "total_found": len(all_jobs),
+        "new_saved": saved_count,
+        "jobs": all_jobs,
+    }
+
+
+@router.get("/sources/free")
+async def list_free_sources():
+    """List all available free job sources - 8 popular boards."""
+    return {
+        "sources": [
+            {
+                "id": "remotive",
+                "name": "Remotive",
+                "url": "https://remotive.com",
+                "description": "Tech remote jobs - curated listings",
+                "job_types": ["Remote"],
+            },
+            {
+                "id": "remoteok",
+                "name": "RemoteOK",
+                "url": "https://remoteok.com",
+                "description": "100,000+ remote jobs worldwide",
+                "job_types": ["Remote"],
+            },
+            {
+                "id": "weworkremotely",
+                "name": "We Work Remotely",
+                "url": "https://weworkremotely.com",
+                "description": "Oldest & most trusted remote job board",
+                "job_types": ["Remote"],
+            },
+            {
+                "id": "jobicy",
+                "name": "Jobicy",
+                "url": "https://jobicy.com",
+                "description": "Remote jobs",
+                "job_types": ["Remote"],
+            },
+            {
+                "id": "arbeitnow",
+                "name": "Arbeitnow",
+                "url": "https://arbeitnow.com",
+                "description": "EU/German jobs",
+                "job_types": ["Remote", "On-site"],
+            },
+            {
+                "id": "himalayas",
+                "name": "Himalayas",
+                "url": "https://himalayas.app",
+                "description": "Remote jobs with company profiles",
+                "job_types": ["Remote"],
+            },
+            {
+                "id": "nodesk",
+                "name": "NoDesk",
+                "url": "https://nodesk.co",
+                "description": "Remote jobs with tech stack details",
+                "job_types": ["Remote"],
+            },
+            {
+                "id": "findwork",
+                "name": "Findwork",
+                "url": "https://findwork.dev",
+                "description": "Developer jobs API",
+                "job_types": ["Remote", "On-site"],
+            },
+        ]
+    }
+
+
 @router.post("/import-url")
 async def import_job_from_url(
     data: JobImportURL,
@@ -171,8 +356,7 @@ async def import_job_from_url(
         async with linkedin_scraper as scraper:
             job_details = await scraper.get_job_details(data.url)
     elif source == "indeed":
-        async with indeed_scraper as scraper:
-            job_details = await scraper.get_job_details(data.url)
+        job_details = await indeed_scraper.get_job_details(data.url)
     else:
         job_details = {"url": data.url, "source": source}
 
@@ -252,13 +436,12 @@ async def search_jobs(
             all_jobs.extend(jobs)
 
     if "indeed" in search.sources:
-        async with indeed_scraper as scraper:
-            jobs = await scraper.search_jobs(
-                query=search.query,
-                location=search.location,
-                limit=search.limit,
-            )
-            all_jobs.extend(jobs)
+        jobs = await indeed_scraper.search_jobs(
+            query=search.query,
+            location=search.location,
+            limit=search.limit,
+        )
+        all_jobs.extend(jobs)
 
     # Save jobs to database
     saved_jobs = []
