@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, JSON, Enum, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, JSON, Enum, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 import enum
 from app.models.base import Base
@@ -9,6 +9,15 @@ class JobSource(str, enum.Enum):
     INDEED = "indeed"
     GLASSDOOR = "glassdoor"
     MANUAL = "manual"
+    # Free sources
+    REMOTIVE = "remotive"
+    REMOTEOK = "remoteok"
+    WEWORKREMOTELY = "weworkremotely"
+    ARBEITNOW = "arbeitnow"
+    JOBICY = "jobicy"
+    HIMALAYAS = "himalayas"
+    NODESK = "nodesk"
+    FINDWORK = "findwork"
 
 
 class JobStatus(str, enum.Enum):
@@ -37,6 +46,7 @@ class Job(Base):
     requirements = Column(JSON, default=list)  # Parsed requirements
     required_skills = Column(JSON, default=list)  # ["Python", "3+ years"]
     salary_range = Column(String(100))
+    is_remote = Column(Boolean, default=False)
 
     # Source
     source = Column(Enum(JobSource), default=JobSource.MANUAL)

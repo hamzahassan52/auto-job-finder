@@ -19,8 +19,11 @@ export interface Job {
   required_skills: string[];
   match_score: number | null;
   status: 'new' | 'applied' | 'interview' | 'rejected' | 'offer';
-  source: 'linkedin' | 'indeed' | 'glassdoor' | 'manual';
+  source: string;
   source_url?: string;
+  salary_range?: string;
+  job_type?: string;
+  is_remote?: boolean;
   ai_summary?: string;
   created_at: string;
 }

@@ -128,6 +128,9 @@ class JobResponse(BaseModel):
     status: str
     source: str
     source_url: Optional[str]
+    salary_range: Optional[str]
+    job_type: Optional[str]
+    is_remote: Optional[bool]
     ai_summary: Optional[str]
     created_at: datetime
 

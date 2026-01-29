@@ -14,10 +14,10 @@ import {
   Mail,
   Send,
   Clock,
-  CheckCircle,
-  XCircle,
   TrendingUp,
   Plus,
+  ExternalLink,
+  Search,
 } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -51,6 +51,12 @@ export default function DashboardPage() {
     fetchData();
   }, []);
 
+  const handleJobClick = (job: Job) => {
+    if (job.source_url) {
+      window.open(job.source_url, '_blank', 'noopener,noreferrer');
+    }
+  };
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -68,17 +74,17 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-            <p className="mt-1 text-gray-600">Overview of your job applications</p>
+            <p className="mt-1 text-sm text-gray-500">Overview of your job applications</p>
           </div>
           <div className="flex gap-3">
             <Link href="/jobs/search">
-              <Button variant="outline">
-                <Briefcase className="mr-2 h-4 w-4" />
+              <Button className="bg-blue-600 hover:bg-blue-700">
+                <Search className="mr-2 h-4 w-4" />
                 Search Jobs
               </Button>
             </Link>
             <Link href="/jobs/new">
-              <Button>
+              <Button variant="outline">
                 <Plus className="mr-2 h-4 w-4" />
                 Add Job
               </Button>
@@ -87,51 +93,51 @@ export default function DashboardPage() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardContent className="flex items-center gap-4 p-6">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-100">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <Card className="border border-gray-200">
+            <CardContent className="flex items-center gap-4 p-5">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100">
                 <Briefcase className="h-6 w-6 text-blue-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-600">Total Jobs</p>
-                <p className="text-2xl font-bold">{jobStats?.total_jobs || 0}</p>
+                <p className="text-sm text-gray-500">Total Jobs</p>
+                <p className="text-2xl font-bold text-gray-900">{jobStats?.total_jobs || 0}</p>
               </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardContent className="flex items-center gap-4 p-6">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-yellow-100">
-                <Clock className="h-6 w-6 text-yellow-600" />
+          <Card className="border border-gray-200">
+            <CardContent className="flex items-center gap-4 p-5">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-100">
+                <Clock className="h-6 w-6 text-amber-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-600">Applied</p>
-                <p className="text-2xl font-bold">{jobStats?.applied || 0}</p>
+                <p className="text-sm text-gray-500">Applied</p>
+                <p className="text-2xl font-bold text-gray-900">{jobStats?.applied || 0}</p>
               </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardContent className="flex items-center gap-4 p-6">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-green-100">
+          <Card className="border border-gray-200">
+            <CardContent className="flex items-center gap-4 p-5">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-green-100">
                 <Send className="h-6 w-6 text-green-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-600">Emails Sent</p>
-                <p className="text-2xl font-bold">{emailStats?.total_sent || 0}</p>
+                <p className="text-sm text-gray-500">Emails Sent</p>
+                <p className="text-2xl font-bold text-gray-900">{emailStats?.total_sent || 0}</p>
               </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardContent className="flex items-center gap-4 p-6">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-purple-100">
+          <Card className="border border-gray-200">
+            <CardContent className="flex items-center gap-4 p-5">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-purple-100">
                 <TrendingUp className="h-6 w-6 text-purple-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-600">Interviews</p>
-                <p className="text-2xl font-bold">{jobStats?.interview || 0}</p>
+                <p className="text-sm text-gray-500">Interviews</p>
+                <p className="text-2xl font-bold text-gray-900">{jobStats?.interview || 0}</p>
               </div>
             </CardContent>
           </Card>
@@ -140,33 +146,46 @@ export default function DashboardPage() {
         {/* Recent Activity */}
         <div className="grid gap-6 lg:grid-cols-2">
           {/* Recent Jobs */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Recent Jobs</CardTitle>
-              <Link href="/jobs" className="text-sm text-blue-600 hover:underline">
+          <Card className="border border-gray-200">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-lg">Recent Jobs</CardTitle>
+              <Link href="/jobs" className="text-sm text-blue-600 hover:text-blue-700 font-medium">
                 View all
               </Link>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-3">
               {recentJobs.length === 0 ? (
-                <p className="py-4 text-center text-gray-500">No jobs yet</p>
+                <div className="py-8 text-center">
+                  <Briefcase className="h-10 w-10 text-gray-300 mx-auto mb-2" />
+                  <p className="text-gray-500">No jobs yet</p>
+                  <Link href="/jobs/search" className="text-sm text-blue-600 hover:underline mt-1 inline-block">
+                    Search for jobs
+                  </Link>
+                </div>
               ) : (
                 recentJobs.map((job) => {
                   const statusBadge = getJobStatusBadge(job.status);
                   return (
-                    <Link
+                    <div
                       key={job.id}
-                      href={`/jobs/${job.id}`}
-                      className="block rounded-lg border border-gray-100 p-4 transition-colors hover:bg-gray-50"
+                      onClick={() => handleJobClick(job)}
+                      className="block rounded-lg border border-gray-100 p-4 transition-all hover:bg-gray-50 hover:border-blue-200 cursor-pointer group"
                     >
                       <div className="flex items-start justify-between">
-                        <div>
-                          <p className="font-medium text-gray-900">{job.title}</p>
-                          <p className="text-sm text-gray-600">{job.company_name}</p>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-gray-900 group-hover:text-blue-600 transition-colors truncate">
+                              {job.title}
+                            </p>
+                            {job.source_url && (
+                              <ExternalLink className="h-3.5 w-3.5 text-gray-400 group-hover:text-blue-500 flex-shrink-0" />
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-500">{job.company_name}</p>
                         </div>
                         <Badge variant={statusBadge.variant}>{statusBadge.label}</Badge>
                       </div>
-                      {job.match_score && (
+                      {job.match_score && job.match_score > 0 && (
                         <div className="mt-2 flex items-center gap-2">
                           <div className="h-1.5 flex-1 rounded-full bg-gray-200">
                             <div
@@ -177,7 +196,7 @@ export default function DashboardPage() {
                           <span className="text-xs text-gray-500">{job.match_score}% match</span>
                         </div>
                       )}
-                    </Link>
+                    </div>
                   );
                 })
               )}
@@ -185,16 +204,19 @@ export default function DashboardPage() {
           </Card>
 
           {/* Recent Emails */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Recent Emails</CardTitle>
-              <Link href="/emails" className="text-sm text-blue-600 hover:underline">
+          <Card className="border border-gray-200">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-lg">Recent Emails</CardTitle>
+              <Link href="/emails" className="text-sm text-blue-600 hover:text-blue-700 font-medium">
                 View all
               </Link>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-3">
               {recentEmails.length === 0 ? (
-                <p className="py-4 text-center text-gray-500">No emails yet</p>
+                <div className="py-8 text-center">
+                  <Mail className="h-10 w-10 text-gray-300 mx-auto mb-2" />
+                  <p className="text-gray-500">No emails yet</p>
+                </div>
               ) : (
                 recentEmails.map((email) => {
                   const statusBadge = getEmailStatusBadge(email.status);
@@ -202,16 +224,16 @@ export default function DashboardPage() {
                     <Link
                       key={email.id}
                       href={`/emails/${email.id}`}
-                      className="block rounded-lg border border-gray-100 p-4 transition-colors hover:bg-gray-50"
+                      className="block rounded-lg border border-gray-100 p-4 transition-all hover:bg-gray-50 hover:border-blue-200"
                     >
                       <div className="flex items-start justify-between">
                         <div className="min-w-0 flex-1">
                           <p className="truncate font-medium text-gray-900">{email.subject}</p>
-                          <p className="text-sm text-gray-600">{email.to_email}</p>
+                          <p className="text-sm text-gray-500">{email.to_email}</p>
                         </div>
                         <Badge variant={statusBadge.variant}>{statusBadge.label}</Badge>
                       </div>
-                      <p className="mt-2 text-xs text-gray-500">
+                      <p className="mt-2 text-xs text-gray-400">
                         {email.sent_at
                           ? `Sent ${formatDateTime(email.sent_at)}`
                           : `Created ${formatDateTime(email.created_at)}`}

@@ -250,6 +250,13 @@ async def search_free_sources(
                 if existing.scalar_one_or_none():
                     continue
 
+            # Get source enum value
+            source_name = job_data.get("source", "manual").upper()
+            try:
+                job_source = JobSource[source_name]
+            except KeyError:
+                job_source = JobSource.MANUAL
+
             job = Job(
                 user_id=current_user.id,
                 title=job_data.get("title", ""),
@@ -257,7 +264,10 @@ async def search_free_sources(
                 location=job_data.get("location", "Remote"),
                 description=job_data.get("description", ""),
                 salary_range=job_data.get("salary_range", ""),
-                source=JobSource.MANUAL,  # Will be shown as source in response
+                job_type=job_data.get("job_type", ""),
+                is_remote=job_data.get("is_remote", True),
+                required_skills=job_data.get("tags", []),
+                source=job_source,
                 source_url=job_data.get("url", ""),
                 source_job_id=job_data.get("source_job_id", ""),
             )
